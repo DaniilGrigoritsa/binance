@@ -12,8 +12,8 @@ dotenv.config({path: "../.env"});
 const app = express();
 
 const port = process.env.PORT || 8080;
-const access: string = process.env.ACCESS || "";
-const secret: string = process.env.SECRET || "";
+const access: string = process.env.ACCESS || "9e450e868d3ef124a00c2ac7e4b5d3989bec1e8e8626bef707776e27646767cb";
+const secret: string = process.env.SECRET || "1f75fd1ccd3ea0de309e55ac33e49ba44cdf4686e79c817ae1d252092a2f3368";
 
 let storage: KeyValueStore<number> = new Storage<number>();
 let binance: Exchange = new Binance(access, secret);

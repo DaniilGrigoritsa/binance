@@ -243,7 +243,7 @@ export class Binance implements Exchange {
                 }
 
                 // Logging if position opened
-                else if (executionType === "CANCELED" || executionType == "CALCULATED" || executionType == "EXPIRED") {
+                else if (executionType === "NEW") {
                     openLogger.info(JSON.parse(event).toString());
                 }
             }
