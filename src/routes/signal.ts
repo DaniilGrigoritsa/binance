@@ -13,30 +13,14 @@ export default function signal(storage: KeyValueStore<number>, exchange: Exchang
         const data = parseAlert(req);
 
         if (data.indicator === 'SI') {
-            console.log("SI")
-            
-            /*
-            // Open position test
-            const leverage = 10;
-            await exchange.setLeverage(leverage, data.pair);
-            await exchange.createOrderWithTpSl(quantity, data.pair, data.value, leverage);
-            */
-
-            /*
-            // Close position test 
-            const position: Position | null = await exchange.getOpenedPosition(data.pair);
-            console.log(position);
-            if (position) await exchange.closePosition(position);
-            */
-
-            /*
+        
             const position: Position | null = await exchange.getOpenedPosition(data.pair);
             console.log("position: ", position)
-
-            if (position) if (Number(position.positionAmt) > 0) {
+            
+            if (position) {
                 if (
-                    position.positionSide === "SHORT" && data.value === "BUY" ||
-                    position.positionSide === "LONG" && data.value === "SELL"
+                    Number(position.positionAmt) < 0 && data.value === "BUY" ||
+                    Number(position.positionSide) > 0 && data.value === "SELL"
                 ) {
                     await exchange.closePosition(position);
                 }
@@ -64,12 +48,12 @@ export default function signal(storage: KeyValueStore<number>, exchange: Exchang
                     await exchange.createOrderWithTpSl(quantity, data.pair, data.value, leverage);
                 }
             }
-            */
         } 
         else {
-            console.log("Other")
-            storage.set(`${data.exchange}:${data.pair}:${data.frame}:${data.indicator}`, data.value);
-            alertLogger.alert(`${data.exchange}:${data.pair}:${data.frame}:${data.indicator}:${data.value}`)
+            const key = `${data.exchange}:${data.pair}:${data.frame}:${data.indicator}`;
+            const value = data.value;
+            storage.set(key, value);
+            alertLogger.info(key, value);
         }
     }
 }

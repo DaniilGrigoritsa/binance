@@ -1,4 +1,5 @@
 import axios from "axios";
+import WebSockets from "ws";
 import { 
     OrderSide,
     USDMClient, 
@@ -10,12 +11,12 @@ import {
     type FuturesAccountBalance,
     type CancelMultipleOrdersParams,
 } from "binance";
-import { type Position } from "../types/types";
+import { type Position, type Event } from "../types/types";
 
 import { Exchange } from "./abstract";
 import { Signal } from "../utils/parceAlert";
 import { KeyValueStore } from "../storage/storage";
-import { alertLogger, errorLogger, closeLogger, openLogger } from "../loggers/index";
+import { errorLogger, closeLogger, openLogger } from "../loggers/index";
 
 import calculateStopLoss from "../utils/calculateStopLoss";
 import calculateTakeProfit from "../utils/calculateTakeProfit";
@@ -55,9 +56,20 @@ export class Binance implements Exchange {
         return orders.map((order) => order.orderId);
     }
 
-    cancelOrder = async (symbol: string, orderId: number) => {
-        const response = await this.client.cancelOrder({symbol, orderId});
-        console.log("response: ", response)
+    private getListenKey = async (): Promise<{listenKey: string}> => {
+        return await this.client.getFuturesUserDataListenKey();
+    }
+
+    private keepListenKeyAlive = async (): Promise<void> => {
+        await this.client.keepAliveFuturesUserDataListenKey();
+    }
+
+    private cancelMultipleOrders = async (symbol: string, orderIdList: number[]): Promise<void> => {
+        const cancelMultipleOrdersParams: CancelMultipleOrdersParams = {
+            symbol: symbol,
+            orderIdList: orderIdList
+        }
+        await this.client.cancelMultipleOrders(cancelMultipleOrdersParams);
     }
     
     getAmountIn = async (): Promise<string> => {
@@ -123,11 +135,7 @@ export class Binance implements Exchange {
             console.log("Close positoin response: ", response);
             const orderIdList = await this.getOpenOrders(position.symbol);
             console.log("orderIds: ", orderIdList);
-            const cancelMultipleOrdersParams: CancelMultipleOrdersParams = {
-                symbol: position.symbol,
-                orderIdList: orderIdList
-            }
-            await this.client.cancelMultipleOrders(cancelMultipleOrdersParams);
+            if (orderIdList.length) await this.cancelMultipleOrders(position.symbol, orderIdList);
         }
         catch (err) { 
             console.log("Err: ", err);
@@ -202,5 +210,48 @@ export class Binance implements Exchange {
             console.log("Err: ", err);
             errorLogger.error(new Error("Failed to open positon with TP and SL"));
         }
+    }
+    
+    createWsDataStream = async () => {
+        let listenKey = await this.getListenKey();
+        console.log("listenKey: ", listenKey);
+        const ws = new WebSockets(`wss://stream.binancefuture.com/ws/${listenKey.listenKey}`); //wss://fstream.binance.com/ws
+
+        ws.on("open", () => console.log("Connection opened"));
+
+        ws.on("error", (err) => console.log(err));
+
+        ws.on("message", async (message) => {
+            console.log("message: ", message)
+            console.log("------------------------")
+            const event: any = JSON.parse(message.toString()); // Set any to normal type
+            if (event.e === "ORDER_TRADE_UPDATE") {
+                const symbol = event.o.s;
+                const type = event.o.ot; // STOP_MARKET || TAKE_PROFIT_MARKET || ...
+                const executionType = event.o.X; // EXPIRED || FILLED || NEW || ...
+
+                // Close TP / SL if position was filled 
+                if (executionType === "FILLED" && (type === "STOP_MARKET" || type === "TAKE_PROFIT_MARKET")) {
+                    const orders = await this.getOpenOrders(symbol);
+                    console.log("Orders to cancel: ", orders)
+                    if (orders.length) await this.cancelMultipleOrders(symbol, orders);
+                }
+
+                // Logging if position closed
+                else if (executionType === "CANCELED" || executionType == "CALCULATED" || executionType == "EXPIRED") {
+                    closeLogger.info(JSON.parse(event).toString());
+                }
+
+                // Logging if position opened
+                else if (executionType === "CANCELED" || executionType == "CALCULATED" || executionType == "EXPIRED") {
+                    openLogger.info(JSON.parse(event).toString());
+                }
+            }
+        });
+
+        setInterval(async () => {
+            console.log("Updating listen keys...");
+            await this.keepListenKeyAlive();
+        }, 1000 * 60 * 30); // Update each 30 minutes
     }
 }

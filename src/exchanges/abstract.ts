@@ -21,6 +21,8 @@ export interface Exchange {
 
     getAmountIn: () => Promise<string>;
 
+    createWsDataStream: () => Promise<void>;
+
     setLeverage: (leverage: number, symbol: string) => Promise<void>;
 
     setIsolatedMargin: (marginType: MarginType, symbol: string) => Promise<number>;
