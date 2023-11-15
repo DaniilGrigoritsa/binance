@@ -21,7 +21,7 @@ export interface Exchange {
 
     getAmountIn: () => Promise<string>;
 
-    createWsDataStream: (isTestnet: boolean) => Promise<void>;
+    createWsDataStream: () => Promise<void>;
 
     setLeverage: (leverage: number, symbol: string) => Promise<void>;
 

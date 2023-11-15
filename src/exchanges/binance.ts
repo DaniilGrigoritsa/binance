@@ -25,26 +25,29 @@ import calculateTakeProfit from "../utils/calculateTakeProfit";
 export class Binance implements Exchange {
     access: string;
     secret: string;
+    isTestnet: boolean;
     client: USDMClient;
     wsClient: WebsocketClient;
 
     constructor(
         access: string, 
-        secret: string
+        secret: string,
+        isTestnet: boolean
     ) {
         this.access = access;
         this.secret = secret;
+        this.isTestnet = isTestnet;
 
         this.client = new USDMClient({
             api_key: this.access,
             api_secret: this.secret,
-            baseUrl: "https://testnet.binancefuture.com"
-        }, {}, true);
+            baseUrl: this.isTestnet ? "https://testnet.binancefuture.com" : ""
+        }, {}, this.isTestnet);
 
         this.wsClient = new WebsocketClient({
             api_key: this.access,
             api_secret: this.secret,
-            wsUrl: "wss://stream.binancefuture.com"
+            wsUrl: this.isTestnet ? "wss://stream.binancefuture.com" : ""
         })
     }
 
@@ -212,8 +215,8 @@ export class Binance implements Exchange {
         }
     }
     
-    createWsDataStream = async (isTestnet: boolean): Promise<void> => {
-        const webSockets = await this.wsClient.subscribeUsdFuturesUserDataStream(isTestnet, true, true);
+    createWsDataStream = async (): Promise<void> => {
+        const webSockets = await this.wsClient.subscribeUsdFuturesUserDataStream(this.isTestnet, true, true);
 
         webSockets.addEventListener("open", () => console.log("Connection opened"));
 
