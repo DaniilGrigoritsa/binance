@@ -4,16 +4,15 @@ import signal from './routes/signal';
 import { Binance } from './exchanges/binance';
 import { Exchange } from './exchanges/abstract';
 import { whiteList } from './middlewares/strictAccess';
-import { Storage, KeyValueStore } from './storage/storage'
+import { Storage, KeyValueStore } from './storage/storage';
 import cors from 'cors';
+import "./config/config";
+import { access, secret, port, WHITE_LIST } from './config/config';
 
  
 dotenv.config({path: "../.env"});
-const app = express();
 
-const port = process.env.PORT || 8080;
-const access: string = process.env.ACCESS || "";
-const secret: string = process.env.SECRET || "";
+const app = express();
 
 let storage: KeyValueStore<number> = new Storage<number>();
 let binance: Exchange = new Binance(access, secret);
@@ -25,18 +24,10 @@ app.use(cors());
 
 app.post(
   '/signal',
-  whiteList([
-    '::1',
-    '52.89.214.238', 
-    '34.212.75.30', 
-    '54.218.53.128', 
-    '52.32.178.7'
-  ]),
+  whiteList(WHITE_LIST),
   signal(storage, binance)
 );
 
 app.listen(port, () => {
   console.log(`Server is running on port ${port}`);
 });
-
-export const quantity: string = process.env.BASE_QUANTITY ? process.env.BASE_QUANTITY : "0.1";

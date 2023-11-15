@@ -1,5 +1,5 @@
-import { quantity } from "../main";
 import { Position } from "../types/types";
+import { quantity } from "../config/config";
 import { Request, Response } from "express";
 import { Exchange } from "../exchanges/abstract";
 import { KeyValueStore } from "../storage/storage";
@@ -15,7 +15,6 @@ export default function signal(storage: KeyValueStore<number>, exchange: Exchang
         if (data.indicator === 'SI') {
         
             const position: Position | null = await exchange.getOpenedPosition(data.pair);
-            console.log("position: ", position)
             
             if (position) {
                 if (

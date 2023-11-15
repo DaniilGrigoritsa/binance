@@ -1,5 +1,4 @@
-const STOP_LOSS_PERCENTAGE = 0.2;
-const PRECISION = 2;
+import { STOP_LOSS_PERCENTAGE, PRECISION } from "../config/config";
 
 export default function calculateStopLoss(
     price: number,

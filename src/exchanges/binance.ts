@@ -17,6 +17,7 @@ import { Exchange } from "./abstract";
 import { Signal } from "../utils/parceAlert";
 import { KeyValueStore } from "../storage/storage";
 import { errorLogger, closeLogger, openLogger } from "../loggers/index";
+import { PRECISION } from "../config/config";
 
 import calculateStopLoss from "../utils/calculateStopLoss";
 import calculateTakeProfit from "../utils/calculateTakeProfit";
@@ -165,6 +166,9 @@ export class Binance implements Exchange {
         const markPrice = await this.getMarkPrice(symbol);
         const stopLossPrice = calculateStopLoss(markPrice, leverage, side);
         const takeProfitPrice = calculateTakeProfit(markPrice, leverage, side);
+
+        const adjustQuantity = Number((Number(quantity) / markPrice).toFixed(PRECISION));
+        quantity = adjustQuantity > 0 ? adjustQuantity.toString() : "0.01";
     
         const entryOrder: NewFuturesOrderParams<string> = {
             quantity: quantity,
@@ -173,8 +177,6 @@ export class Binance implements Exchange {
             symbol: symbol,
             type: "MARKET",
         };
-
-        // console.log("entryOrder: ", entryOrder)
       
         const takeProfitOrder: NewFuturesOrderParams<string> = {
             priceProtect: "TRUE",
@@ -186,8 +188,6 @@ export class Binance implements Exchange {
             workingType: "MARK_PRICE",
             closePosition: "true",
         };
-
-        // console.log("takeProfitOrder: ", takeProfitOrder)
       
         const stopLossOrder: NewFuturesOrderParams<string> = {
             priceProtect: "TRUE",
@@ -199,8 +199,6 @@ export class Binance implements Exchange {
             workingType: "MARK_PRICE",
             closePosition: "true"
         };
-
-        // console.log("stopLossOrder: ", stopLossOrder)
         
         try { 
             const response = await this.client.submitMultipleOrders([entryOrder, takeProfitOrder, stopLossOrder]);

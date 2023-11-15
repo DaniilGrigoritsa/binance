@@ -1,5 +1,4 @@
-const TAKE_PROFIT_PERCENTAGE = 0.1;
-const PRECISION = 2;
+import { TAKE_PROFIT_PERCENTAGE, PRECISION } from "../config/config";
 
 export default function calculateTakeProfit(
     price: number,
