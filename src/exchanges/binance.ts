@@ -41,14 +41,16 @@ export class Binance implements Exchange {
         this.client = new USDMClient({
             api_key: this.access,
             api_secret: this.secret,
-            baseUrl: this.isTestnet ? "https://testnet.binancefuture.com" : ""
+            baseUrl: this.isTestnet ? "https://testnet.binancefuture.com" : "https://fapi.binance.com"
         }, {}, this.isTestnet);
 
         this.wsClient = new WebsocketClient({
             api_key: this.access,
             api_secret: this.secret,
-            wsUrl: this.isTestnet ? "wss://stream.binancefuture.com" : ""
+            wsUrl: this.isTestnet ? "wss://stream.binancefuture.com" : "wss://fstream.binance.com"
         })
+
+        this.createWsDataStream();
     }
 
     private getMarkPrice = async (symbol: string): Promise<number> => {

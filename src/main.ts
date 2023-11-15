@@ -17,8 +17,6 @@ const app = express();
 let storage: KeyValueStore<number> = new Storage<number>();
 let binance: Exchange = new Binance(access, secret, isTestnet);
 
-binance.createWsDataStream();
-
 app.use(express.json());
 app.use(cors());
 
