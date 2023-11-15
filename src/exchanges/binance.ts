@@ -1,17 +1,16 @@
-import axios from "axios";
-import WebSockets from "ws";
 import { 
-    OrderSide,
     USDMClient, 
-    NewFuturesOrderParams, 
+    WebsocketClient,
+    type OrderSide,
     type MarginType,
     type OrderResult,
     type FuturesPosition,
     type ModeChangeResult,
+    type NewFuturesOrderParams, 
     type FuturesAccountBalance,
     type CancelMultipleOrdersParams,
 } from "binance";
-import { type Position, type Event } from "../types/types";
+import { type Position } from "../types/types";
 
 import { Exchange } from "./abstract";
 import { Signal } from "../utils/parceAlert";
@@ -27,6 +26,7 @@ export class Binance implements Exchange {
     access: string;
     secret: string;
     client: USDMClient;
+    wsClient: WebsocketClient;
 
     constructor(
         access: string, 
@@ -34,16 +34,24 @@ export class Binance implements Exchange {
     ) {
         this.access = access;
         this.secret = secret;
+
         this.client = new USDMClient({
             api_key: this.access,
             api_secret: this.secret,
             baseUrl: "https://testnet.binancefuture.com"
         }, {}, true);
+
+        this.wsClient = new WebsocketClient({
+            api_key: this.access,
+            api_secret: this.secret,
+            wsUrl: "wss://stream.binancefuture.com"
+        })
     }
 
     private getMarkPrice = async (symbol: string): Promise<number> => {
-        const response = await axios.get(`https://api.binance.com/api/v3/ticker/price?symbol=${symbol}`);
-        return response.data.price;
+        const markPrice = await this.client.getMarkPrice({symbol});
+        if (Array.isArray(markPrice)) return 0; // Should return undefined
+        else return Number(markPrice.markPrice);
     }
     
     private getAvailableBalance = async (): Promise<number> => {
@@ -57,20 +65,20 @@ export class Binance implements Exchange {
         return orders.map((order) => order.orderId);
     }
 
-    private getListenKey = async (): Promise<{listenKey: string}> => {
-        return await this.client.getFuturesUserDataListenKey();
-    }
-
-    private keepListenKeyAlive = async (): Promise<void> => {
-        await this.client.keepAliveFuturesUserDataListenKey();
-    }
-
     private cancelMultipleOrders = async (symbol: string, orderIdList: number[]): Promise<void> => {
         const cancelMultipleOrdersParams: CancelMultipleOrdersParams = {
             symbol: symbol,
             orderIdList: orderIdList
         }
-        await this.client.cancelMultipleOrders(cancelMultipleOrdersParams);
+        const response = await this.client.cancelMultipleOrders(cancelMultipleOrdersParams);
+
+        closeLogger.info(JSON.parse(Object(response)).toString());
+    }
+
+    private adjustQuantity = (quantity: string, markPrice: number): string => {
+        const adjustQuantity = Number((Number(quantity) / markPrice).toFixed(PRECISION));
+        if (adjustQuantity > 0) return adjustQuantity.toString()
+        else return (1 / 10 ** PRECISION).toString();
     }
     
     getAmountIn = async (): Promise<string> => {
@@ -108,11 +116,9 @@ export class Binance implements Exchange {
     getOpenedPosition = async (symbol: string): Promise<Position | null> => {
         try {
             const positions: FuturesPosition[] = await this.client.getPositions({symbol});
-            console.log("positions: ", positions)
             for (const position of positions) if (position.symbol.toUpperCase() === symbol) return position;
         }
         catch (err) { 
-            console.log("Err: ", err);
             errorLogger.error(new Error("Failed to get opened positions"));
         }
         return null;
@@ -129,17 +135,14 @@ export class Binance implements Exchange {
             type: "MARKET",
         };
 
-        console.log("closePosition: ", closePosition)
-
         try {
             const response = await this.client.submitMultipleOrders([closePosition]);
-            console.log("Close positoin response: ", response);
             const orderIdList = await this.getOpenOrders(position.symbol);
-            console.log("orderIds: ", orderIdList);
             if (orderIdList.length) await this.cancelMultipleOrders(position.symbol, orderIdList);
+
+            closeLogger.info(JSON.parse(Object(response)).toString());
         }
         catch (err) { 
-            console.log("Err: ", err);
             errorLogger.error(new Error("Failed to close position"));
         }
     }
@@ -152,7 +155,6 @@ export class Binance implements Exchange {
     setLeverage = async (leverage: number, symbol: string): Promise<void> => {
         try { await this.client.setLeverage({symbol, leverage}) }
         catch (err) { 
-            console.log("Err: ", err);
             errorLogger.error(new Error("Failed to set leverage"));
         }
     }
@@ -167,8 +169,7 @@ export class Binance implements Exchange {
         const stopLossPrice = calculateStopLoss(markPrice, leverage, side);
         const takeProfitPrice = calculateTakeProfit(markPrice, leverage, side);
 
-        const adjustQuantity = Number((Number(quantity) / markPrice).toFixed(PRECISION));
-        quantity = adjustQuantity > 0 ? adjustQuantity.toString() : "0.01";
+        quantity = this.adjustQuantity(quantity, markPrice);
     
         const entryOrder: NewFuturesOrderParams<string> = {
             quantity: quantity,
@@ -201,37 +202,33 @@ export class Binance implements Exchange {
         };
         
         try { 
-            const response = await this.client.submitMultipleOrders([entryOrder, takeProfitOrder, stopLossOrder]);
-            console.log("Open positoin response: ", response);
+            const response = await this.client.submitMultipleOrders(
+                [entryOrder, takeProfitOrder, stopLossOrder]
+            );
+            openLogger.info(JSON.parse(Object(response)).toString());
         }
         catch (err) { 
-            console.log("Err: ", err);
             errorLogger.error(new Error("Failed to open positon with TP and SL"));
         }
     }
     
-    createWsDataStream = async () => {
-        let listenKey = await this.getListenKey();
-        console.log("listenKey: ", listenKey);
-        const ws = new WebSockets(`wss://stream.binancefuture.com/ws/${listenKey.listenKey}`); //wss://fstream.binance.com/ws
+    createWsDataStream = async (isTestnet: boolean): Promise<void> => {
+        const webSockets = await this.wsClient.subscribeUsdFuturesUserDataStream(isTestnet, true, true);
 
-        ws.on("open", () => console.log("Connection opened"));
+        webSockets.addEventListener("open", () => console.log("Connection opened"));
 
-        ws.on("error", (err) => console.log(err));
+        webSockets.addEventListener("error", (error) => console.log(error));
 
-        ws.on("message", async (message) => {
-            console.log("message: ", message)
-            console.log("------------------------")
-            const event: any = JSON.parse(message.toString()); // Set any to normal type
+        webSockets.addEventListener("message", async (message) => {
+            const event: any = JSON.parse(message.toString()); // Set type
             if (event.e === "ORDER_TRADE_UPDATE") {
                 const symbol = event.o.s;
-                const type = event.o.ot; // STOP_MARKET || TAKE_PROFIT_MARKET || ...
-                const executionType = event.o.X; // EXPIRED || FILLED || NEW || ...
+                const type = event.o.ot;
+                const executionType = event.o.X;
 
                 // Close TP / SL if position was filled 
                 if (executionType === "FILLED" && (type === "STOP_MARKET" || type === "TAKE_PROFIT_MARKET")) {
                     const orders = await this.getOpenOrders(symbol);
-                    console.log("Orders to cancel: ", orders)
                     if (orders.length) await this.cancelMultipleOrders(symbol, orders);
                 }
 
@@ -246,10 +243,5 @@ export class Binance implements Exchange {
                 }
             }
         });
-
-        setInterval(async () => {
-            console.log("Updating listen keys...");
-            await this.keepListenKeyAlive();
-        }, 1000 * 60 * 30); // Update each 30 minutes
     }
 }

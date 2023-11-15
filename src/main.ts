@@ -7,7 +7,7 @@ import { whiteList } from './middlewares/strictAccess';
 import { Storage, KeyValueStore } from './storage/storage';
 import cors from 'cors';
 import "./config/config";
-import { access, secret, port, WHITE_LIST } from './config/config';
+import { access, secret, port, WHITE_LIST, IS_TESTNET} from './config/config';
 
  
 dotenv.config({path: "../.env"});
@@ -17,7 +17,7 @@ const app = express();
 let storage: KeyValueStore<number> = new Storage<number>();
 let binance: Exchange = new Binance(access, secret);
 
-binance.createWsDataStream();
+binance.createWsDataStream(IS_TESTNET);
 
 app.use(express.json());
 app.use(cors());
