@@ -1,4 +1,3 @@
-import dotenv from 'dotenv';
 import express from 'express';
 import signal from './routes/signal';
 import { Binance } from './exchanges/binance';
@@ -8,9 +7,6 @@ import { Storage, KeyValueStore } from './storage/storage';
 import cors from 'cors';
 import "./config/config";
 import { access, secret, port, isTestnet, WHITE_LIST} from './config/config';
-
- 
-dotenv.config({path: "../.env"});
 
 const app = express();
 
