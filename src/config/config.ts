@@ -13,7 +13,7 @@ export const WHITE_LIST = [
     '54.218.53.128', 
     '52.32.178.7'
 ] || []
-export const isTestnet = Boolean(process.env.IS_TESTNET) || true;
+export const isTestnet = Boolean(process.env.IS_TESTNET);
 
 export const PRECISION = 2;
 export const STOP_LOSS_PERCENTAGE = 0.2;
