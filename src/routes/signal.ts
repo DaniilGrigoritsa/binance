@@ -15,17 +15,21 @@ export default function signal(storage: KeyValueStore<number>, exchange: Exchang
         if (data.indicator === 'SI') {
         
             const position: Position | null = await exchange.getOpenedPosition(data.pair);
+            console.log("position: ", position);
             
-            if (position) {
+            if (position && Number(position?.positionAmt) > 0) {
                 if (
                     Number(position.positionAmt) < 0 && data.value === "BUY" ||
-                    Number(position.positionSide) > 0 && data.value === "SELL"
+                    Number(position.positionAmt) > 0 && data.value === "SELL"
                 ) {
                     await exchange.closePosition(position);
                 }
             }
             else {
-                if (await exchange.checkRequirements(storage, data)) {
+                const requirements = await exchange.checkRequirements(storage, data);
+                console.log("requirements", requirements)
+                
+                if (requirements) {
                     let leverage;
                     const respCode = await exchange.setIsolatedMargin("ISOLATED", data.pair);
                     if (respCode !== 200) errorLogger.error(new Error("Failed to set margin type"));
@@ -33,14 +37,19 @@ export default function signal(storage: KeyValueStore<number>, exchange: Exchang
                     switch (data.frame) {
                         case "1h":
                             leverage = 10;
+                            break;
                         case "2h": 
                             leverage = 9;
+                            break;
                         case "3h": 
                             leverage = 7;
+                            break;
                         case "4h":
                             leverage = 5;
+                            break;
                         default: 
                             leverage = 1;
+                            break;
                     }
 
                     await exchange.setLeverage(leverage, data.pair);
