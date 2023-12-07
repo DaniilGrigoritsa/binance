@@ -74,9 +74,7 @@ export class Binance implements Exchange {
             symbol: symbol,
             orderIdList: orderIdList
         }
-        const response = await this.client.cancelMultipleOrders(cancelMultipleOrdersParams);
-
-        closeLogger.info(JSON.stringify(response).toString());
+        await this.client.cancelMultipleOrders(cancelMultipleOrdersParams);
     }
 
     private adjustQuantity = (quantity: string, markPrice: number, precision: number): string => {
@@ -87,7 +85,6 @@ export class Binance implements Exchange {
 
     private getPricePrecision = async (pair: string): Promise<number> => {
         const exchangeInfo = await this.client.getExchangeInfo();
-        console.log("exchangeInfo: ", exchangeInfo)
         for (let exchange of exchangeInfo.symbols) {
             if (exchange.symbol === pair) return exchange.pricePrecision;
         }
@@ -96,7 +93,6 @@ export class Binance implements Exchange {
 
     private getQuantityPrecision = async (pair: string): Promise<number> => {
         const exchangeInfo = await this.client.getExchangeInfo();
-        console.log("exchangeInfo: ", exchangeInfo)
         for (let exchange of exchangeInfo.symbols) {
             if (exchange.symbol === pair) return exchange.quantityPrecision;
         }
@@ -123,7 +119,7 @@ export class Binance implements Exchange {
         else return false;
 
         // Сигнал совпадает с направлением локального тренда, в том числе по всем старшим таймфреймам (кроме 1d)
-        const frames = ['1h', '2h', '3h', '4h', '6h'];
+        const frames = ['1h', '2h', '3h', '4h'];
         for (let iter = frames.indexOf(data.frame); iter < frames.length; iter++) {
             let trLocal = storage.get(`${data.exchange}:${data.pair}:${frames[iter]}:TR`);
             if (trLocal) {
@@ -141,7 +137,7 @@ export class Binance implements Exchange {
             for (const position of positions) if (position.symbol.toUpperCase() === symbol) return position;
         }
         catch (err) { 
-            errorLogger.error(new Error("Failed to get opened positions"));
+            errorLogger.error(new Error(`Failed to get opened positions. ${(new Date()).toLocaleString()}`));
         }
         return null;
     }
@@ -158,14 +154,12 @@ export class Binance implements Exchange {
         };
 
         try {
-            const response = await this.client.submitMultipleOrders([closePosition]);
+            await this.client.submitMultipleOrders([closePosition]);
             const orderIdList = await this.getOpenOrders(position.symbol);
             if (orderIdList.length) await this.cancelMultipleOrders(position.symbol, orderIdList);
-
-            closeLogger.info(JSON.stringify(response).toString());
         }
         catch (err) { 
-            errorLogger.error(new Error("Failed to close position"));
+            errorLogger.error(new Error(`Failed to close position. ${(new Date()).toLocaleString()}`));
         }
     }
     
@@ -183,7 +177,7 @@ export class Binance implements Exchange {
     setLeverage = async (leverage: number, symbol: string): Promise<void> => {
         try { await this.client.setLeverage({symbol, leverage}) }
         catch (err) { 
-            errorLogger.error(new Error("Failed to set leverage"));
+            errorLogger.error(new Error(`Failed to set leverage. ${(new Date()).toLocaleString()}`));
         }
     }
     
@@ -208,8 +202,6 @@ export class Binance implements Exchange {
             symbol: symbol,
             type: "MARKET",
         };
-
-        // console.log("entryOrder", entryOrder)
       
         const takeProfitOrder: NewFuturesOrderParams<string> = {
             priceProtect: "TRUE",
@@ -221,8 +213,6 @@ export class Binance implements Exchange {
             workingType: "MARK_PRICE",
             closePosition: "true",
         };
-
-        // console.log("takeProfitOrder", takeProfitOrder)
       
         const stopLossOrder: NewFuturesOrderParams<string> = {
             priceProtect: "TRUE",
@@ -234,17 +224,14 @@ export class Binance implements Exchange {
             workingType: "MARK_PRICE",
             closePosition: "true"
         };
-
-        // console.log("stopLossOrder", stopLossOrder)
         
         try { 
-            const response = await this.client.submitMultipleOrders(
+            await this.client.submitMultipleOrders(
                 [entryOrder, takeProfitOrder, stopLossOrder]
             );
-            openLogger.info(JSON.stringify(response)).toString();
         }
         catch (err) { 
-            errorLogger.error(new Error("Failed to open positon with TP and SL"));
+            errorLogger.error(new Error(`Failed to open positon with TP and SL. ${(new Date()).toLocaleString()}`));
         }
     }
     
@@ -257,11 +244,11 @@ export class Binance implements Exchange {
 
         webSockets.addEventListener("message", async (message) => {
             const event: any = JSON.parse(message.data); // Set type
-            console.log(event);
+
             if (event.e === "ORDER_TRADE_UPDATE") {
-                const symbol = event.o.s;
-                const type = event.o.ot;
-                const executionType = event.o.X;
+                const symbol: string = event.o.s;
+                const type: string = event.o.ot;
+                const executionType: string = event.o.X;
 
                 // Close TP / SL if position was filled 
                 if (executionType === "FILLED" && (type === "STOP_MARKET" || type === "TAKE_PROFIT_MARKET")) {
@@ -269,14 +256,22 @@ export class Binance implements Exchange {
                     if (orders.length) await this.cancelMultipleOrders(symbol, orders);
                 }
 
-                // Logging if position closed
-                else if (executionType === "CANCELED" || executionType == "CALCULATED" || executionType == "EXPIRED") {
-                    closeLogger.info(JSON.stringify(event).toString());
+                // Logging opened and closed positions
+                if (executionType === "FILLED" && type === "MARKET") {
+                    const realisedProfit: string = event.o.rp;
+                    if (realisedProfit === "0") 
+                        openLogger.info(`BINANCE ${event.o.s} ${event.o.S} openPrice: ${event.o.L} quantity: ${event.o.q}`);
+                    else
+                        closeLogger.info(`BINANCE ${event.o.s} ${event.o.S} openPrice: ${event.o.L} quantity: ${event.o.q} realisedProfit: ${realisedProfit}`);
                 }
 
-                // Logging if position opened
-                else if (executionType === "NEW") {
-                    openLogger.info(JSON.stringify(event).toString());
+                else if (executionType === "CANCELED") {
+                    // closeLogger.info(`BINANCE CANCELED ${event.o.s} ${event.o.ot}`)
+                }
+
+                // Logging if position liquidated
+                else if (executionType == "CALCULATED" || executionType == "EXPIRED") {
+                    // closeLogger.info(``);
                 }
             }
         });

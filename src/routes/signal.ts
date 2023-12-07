@@ -15,7 +15,6 @@ export default function signal(storage: KeyValueStore<number>, exchange: Exchang
         if (data.indicator === 'SI') {
         
             const position: Position | null = await exchange.getOpenedPosition(data.pair);
-            console.log("position: ", position);
             
             if (position && Number(position?.positionAmt) > 0) {
                 if (
@@ -32,7 +31,7 @@ export default function signal(storage: KeyValueStore<number>, exchange: Exchang
                 if (requirements) {
                     let leverage;
                     const respCode = await exchange.setIsolatedMargin("ISOLATED", data.pair);
-                    if (respCode !== 200) errorLogger.error(new Error("Failed to set margin type"));
+                    if (respCode !== 200) errorLogger.error(new Error(`Failed to set margin type. ${(new Date()).toLocaleString()}`));
                     
                     switch (data.frame) {
                         case "1h":
@@ -61,7 +60,7 @@ export default function signal(storage: KeyValueStore<number>, exchange: Exchang
             const key = `${data.exchange}:${data.pair}:${data.frame}:${data.indicator}`;
             const value = data.value;
             storage.set(key, value);
-            alertLogger.info(key, value);
+            alertLogger.info(`${key} = ${value}. ${(new Date()).toLocaleString()}`);
         }
     }
 }
