@@ -20,6 +20,8 @@ import { errorLogger, closeLogger, openLogger } from "../loggers/index";
 import calculateStopLoss from "../utils/calculateStopLoss";
 import calculateTakeProfit from "../utils/calculateTakeProfit";
 
+import fs from "fs";
+
 
 export class Binance implements Exchange {
     private access: string;
@@ -97,6 +99,22 @@ export class Binance implements Exchange {
             if (exchange.symbol === pair) return exchange.quantityPrecision;
         }
         return 0;
+    }
+
+    private getAllPositions = async (): Promise<void> => {
+        const allPositions = await this.client.getPositions();
+        const openedPositions = allPositions.filter((position) => Number(position.positionAmt) > 0);
+        const position = openedPositions.map((openedPosition) => ({
+            symbol: openedPosition.symbol,
+            size: openedPosition.positionAmt,
+            unrealizedProfit: openedPosition.unRealizedProfit,
+            leverage: openedPosition.leverage,
+            updateTime: new Date(openedPosition.updateTime).toString().split("GMT")[0]
+        }))
+
+        fs.writeFile("./logs/openedPositions.json", JSON.stringify(position), (err) => {
+            if (err) console.log(err);
+        })
     }
     
     getAmountIn = async (): Promise<string> => {
@@ -243,7 +261,7 @@ export class Binance implements Exchange {
         webSockets.addEventListener("error", (error) => console.log(error));
 
         webSockets.addEventListener("message", async (message) => {
-            const event: any = JSON.parse(message.data); // Set type
+            const event: any = JSON.parse(message.data.toString()); // Set type
 
             if (event.e === "ORDER_TRADE_UPDATE") {
                 const symbol: string = event.o.s;
@@ -263,6 +281,8 @@ export class Binance implements Exchange {
                         openLogger.info(`BINANCE ${event.o.s} ${event.o.S} openPrice: ${event.o.L} quantity: ${event.o.q}`);
                     else
                         closeLogger.info(`BINANCE ${event.o.s} ${event.o.S} openPrice: ${event.o.L} quantity: ${event.o.q} realisedProfit: ${realisedProfit}`);
+
+                    await this.getAllPositions();
                 }
 
                 else if (executionType === "CANCELED") {
