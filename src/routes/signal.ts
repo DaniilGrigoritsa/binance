@@ -16,7 +16,7 @@ export default function signal(storage: KeyValueStore<number>, exchange: Exchang
         
             const position: Position | null = await exchange.getOpenedPosition(data.pair);
             
-            if (position && Number(position?.positionAmt) > 0) {
+            if (position && Number(position?.positionAmt) !== 0) {
                 if (
                     Number(position.positionAmt) < 0 && data.value === "BUY" ||
                     Number(position.positionAmt) > 0 && data.value === "SELL"
@@ -60,7 +60,7 @@ export default function signal(storage: KeyValueStore<number>, exchange: Exchang
             const key = `${data.exchange}:${data.pair}:${data.frame}:${data.indicator}`;
             const value = data.value;
             storage.set(key, value);
-            alertLogger.info(`${key} = ${value}. ${(new Date()).toLocaleString()}`);
+            alertLogger.info(`${key} = ${value} ${(new Date()).toLocaleString()}`);
         }
     }
 }
